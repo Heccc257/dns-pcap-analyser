@@ -1,8 +1,5 @@
 #include "src/dns_pcap_analyser.h"
 #include <iostream>
-#include <string>
-#include <filesystem>
-#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -62,6 +59,8 @@ int main(int argc, char* argv[]) {
 
     std::string path = argv[1];
 	auto files = parseFiles(path);
-
+	DNSPcapAnalyser analyser(files);
+	result_t result;
+	analyser.analyseAll(result);
     return 0;
 }

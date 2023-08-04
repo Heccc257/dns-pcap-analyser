@@ -11,6 +11,13 @@
 #include <cstring>
 #include <unordered_map>
 #include <iostream>
+#include <string>
+#include <filesystem>
+#include <vector>
+#include <map>
+#include <set>
+
+namespace fs = std::filesystem;
 
 // DNS头部结构
 struct DNSHeader {
@@ -38,12 +45,36 @@ struct DNSAnswer {
 	u_short dataLength;
 };
 
+// 设置成entry, 方便以后支持更多的分析内容
+
+typedef struct {
+	enum class IPVersion {
+		IPv4,
+		IPv6,
+	};
+	IPVersion ip_version;
+	std::string IP;
+} dns_entry;
+
+typedef std::vector<dns_entry> dns_entries;
+
+typedef std::map<std::string, dns_entries> result_t ;
+
 class DNSPcapAnalyser {
 public:
-	void processPacket(u_char *userData, const struct pcap_pkthdr *pkthdr, const u_char *packetData);
-
+	static void processPacket(u_char *userData, const struct pcap_pkthdr *pkthdr, const u_char *packetData);
+	DNSPcapAnalyser() = default;
+	DNSPcapAnalyser(std::vector<fs::path>& _files): files(_files) { };
+	~DNSPcapAnalyser() = default;
+	void open(std::vector<fs::path>& _files);
+	bool analyse(const fs::path& path, result_t &results);
+	bool analyseAll(result_t &result);
 private:
   	pcap_t *pcapHandle;
 	char errbuf[PCAP_ERRBUF_SIZE];
+	std::vector<fs::path> files;
+	result_t* mResult;
 };
+
+
 #endif

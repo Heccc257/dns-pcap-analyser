@@ -33,3 +33,6 @@
 
 # Ignore VS Code settings
 .vscode/
+
+# test
+test/*
