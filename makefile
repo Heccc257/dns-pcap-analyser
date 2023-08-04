@@ -2,7 +2,7 @@
 
 # Compiler and flags
 CC := g++
-CFLAGS := -Wall -Wextra -pedantic -std=c++11
+CFLAGS := -Wall -Wextra -pedantic -std=c++17
 LDFLAGS := -lpcap
 
 # Directories
