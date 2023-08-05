@@ -1,18 +1,13 @@
 #include "dns_pcap_analyser.h"
 
 int cnt;
-void DNSPcapAnalyser::processPacket(u_char *userData, const struct pcap_pkthdr *pkthdr, const u_char *packetData) {
+void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHeader *pkthdr, const u_char *packetData) {
+
     DNSPcapAnalyser* analyserThis = reinterpret_cast<DNSPcapAnalyser*>(userData);
     result_t& result = *analyserThis->mResult;
-    // std::cerr << pkthdr->caplen << '\n';
-    // 已经捕获了所有报文
-    {
-        cnt ++ ;
-        if (cnt % 1000 == 0) {
-            std::cerr << "cnt = " << cnt << '\n';
-        }
-    }
-    if (pkthdr->caplen == 0) {
+    cnt ++ ;
+
+    if (pkthdr->incl_len == 0) {
         std::cerr << "capture end\n";
         pcap_breakloop(analyserThis->pcapHandle);
         return ;
@@ -29,8 +24,6 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct pcap_pkthdr *
     const struct ip *ipHeader = (struct ip *)(packetData + virtualLanSize + sizeof(struct ether_header));
     struct udphdr *udpHeader = (struct udphdr *)(packetData + virtualLanSize + sizeof(struct ether_header) + sizeof(struct ip));
 
-    // 如果不是 response 报文则 return
-    if (ipHeader->ip_p != IPPROTO_UDP || ntohs(udpHeader->uh_sport) != 53) return;
     
     // 计算 UDP 数据包的偏移量
     int ipHeaderSize = 20; // IP 头部的长度为20字节
@@ -44,8 +37,17 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct pcap_pkthdr *
     // 解析 DNS 头部
     const struct DNSHeader *dnsHeader = (struct DNSHeader *)(packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize);
 
+    
     // 获取查询问题部分的起始位置
     const u_char *queryStart = (packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize + sizeof(struct DNSHeader));
+    
+    if (cnt == 1354170) {
+        std::cerr << "ANS = " << htons(dnsHeader->answers) << " " << pkthdr->incl_len << ' ' << pkthdr->orig_len << '\n';
+        // exit(0);
+    }
+
+    // 如果不是 response 报文则 return
+    if (ipHeader->ip_p != IPPROTO_UDP || ntohs(udpHeader->uh_sport) != 53) return;
 
     if (ntohs(dnsHeader->questions) > 1) {
         // 先不考虑query数量大于1的情况
@@ -54,15 +56,29 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct pcap_pkthdr *
 
     // 遍历查询问题
     const u_char *currentByte = queryStart;
-    std::string domain;
-    for (int i = 0; i < ntohs(dnsHeader->questions); ++i) {
-        // 解析域名
+    const u_char *endByte = packetData + pkthdr->incl_len;
 
+    auto truncate = [&]() { std::cerr << "truncated packet number: " << std::dec << cnt << '\n'; };
+
+
+    std::string domain;
+    auto read_point_format = [&]() {
+        if (cnt == 1354170) {
+            std::cerr << "current = " << (void*)currentByte << " begin = " << (void*)packetData << "\n";
+        }
+        domain = "";
+        bool is_pointer = 0;
+        const u_char* lst;
         while (*currentByte != 0) {
-            if ((*currentByte & 0xC0) == 0xC0) { 
+            if ((*currentByte & 0xC0) == 0xC0) {
+                if (!is_pointer) {
+                    is_pointer = 1;
+                    lst = currentByte;
+                }
                 // 判断是否为指针
                 int pointer = (*currentByte & 0x3F) << 8 | *(currentByte + 1);
                 currentByte = packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + pointer;
+                // 如果字符串是以指针的形式保存，则currentByte的最终位置为当前位置向后位移两个字节。
             } else {
                 int labelLength = *currentByte;
                 currentByte++;
@@ -72,32 +88,50 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct pcap_pkthdr *
                 }
                 domain += '.';
             }
+            if (currentByte >= endByte) {
+                truncate(); // 
+                return 0;
+            }
         }
         if (domain.size() && *(--domain.end()) == '.')
             domain.pop_back(); // 移除最后的 '.'
+
+        if (is_pointer){
+            currentByte = lst + 2;
+        } 
+        return 1;
+    };
+    for (int i = 0; i < ntohs(dnsHeader->questions); ++i) {
+        // 解析域名
+        if (!read_point_format()) return ;
     }
-    // std::cerr << "cnt = " << cnt << '\n';
+    
+
     // 解析回答部分
     const u_char *answerStart = currentByte + 5; // 跳过查询问题的类型和类别
 
     // 这里需要获取一下query的类型和类别
     const struct DNSQuery *queryHeader = (struct DNSQuery *)(currentByte + 1);
 
-    // std::cerr << "domain: " << domain << '\n';
     dns_entries &entries = result[domain];
     for (int j = 0; j < htons(dnsHeader->answers); ++j) {
+
         const struct DNSAnswer *answerHeader = (struct DNSAnswer *)(answerStart);
         const u_char *answerData = answerStart + sizeof(struct DNSAnswer);
 
+        if (answerData + ntohs(answerHeader->dataLength) > endByte) {
+            truncate();
+            return ;
+        }
 
-        if (ntohs(answerHeader->type) == ntohs(queryHeader->type) && ntohs(answerHeader->_class) == ntohs(queryHeader->_class)) {
-            // 处理回答部分类型为 A 类型（IPv4地址）的记录
+        currentByte = reinterpret_cast<const u_char*>(answerHeader); // hdr的头两个字节为name的指针
+
+        if (ntohs(answerHeader->type) == ntohs(queryHeader->type) && ntohs(answerHeader->_class) == ntohs(queryHeader->_class)) {            // 处理回答部分类型为 A 类型（IPv4地址）的记录
             if (ntohs(answerHeader->type) == 1 && answerHeader->dataLength == htons(4)) {
                 struct in_addr answerIPv4;
                 memcpy(&answerIPv4, answerData, sizeof(struct in_addr));
                 // 打印域名和对应的 IP 地址
-                // std::cout << "Domain: " << domain << ", IP Address: " << inet_ntoa(answerIPv4) << std::endl;
-                
+
                 dns_entry tem;
                 tem.ip_version = dns_entry::IPVersion::IPv4;
                 tem.IP = std::string(inet_ntoa(answerIPv4));
@@ -118,10 +152,10 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct pcap_pkthdr *
                 entries.push_back(tem);
             }
         }
-
         // 移动到下一个回答部分
         answerStart += sizeof(struct DNSAnswer) + ntohs(answerHeader->dataLength);
     }
+    return ;
 }
 
 void DNSPcapAnalyser::open(std::vector<fs::path>& _files) {
@@ -130,20 +164,21 @@ void DNSPcapAnalyser::open(std::vector<fs::path>& _files) {
 }
 
 bool DNSPcapAnalyser::analyse(const fs::path& filePath, result_t &result) {
+    cnt = 0;
     this->mResult = &result;
     std::cerr << "begin analyse " << filePath.string() << '\n';
-    pcapHandle = pcap_open_offline(filePath.string().c_str(), errbuf);
-    if (pcapHandle == nullptr) {
-        std::cerr << "Error opening pcap file: " << errbuf << std::endl;
+    PcapReader reader(filePath);
+    if (!reader.openFile()) {
+        std::cerr << "Error opening pcap file: \n";
         return 0;
     }
-    // 循环读取 pcap 文件中的数据包
-
-    pcap_loop(pcapHandle, 0, DNSPcapAnalyser::processPacket, reinterpret_cast<u_char*>(this));
-
-    // // 关闭 pcap 文件
-    pcap_close(pcapHandle);
-
+    
+    const char* hdr;
+    while ((hdr = reader.getNextPacketHdr()) != nullptr) {
+        const char* packet_data = hdr + sizeof(PcapPacketHeader);
+        DNSPcapAnalyser::processPacket(reinterpret_cast<u_char*>(this), 
+            reinterpret_cast<const PcapPacketHeader *>(hdr), reinterpret_cast<const u_char *>(packet_data));
+    }
     return 1;
 }
 bool DNSPcapAnalyser::analyseAll(result_t &result) {

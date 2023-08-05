@@ -79,10 +79,14 @@ int main(int argc, char* argv[]) {
 	result_t result;
 	analyser.analyseAll(result);
     for (auto &entries: result) {
+        std::set<std::string>s;
         std::cout << entries.first << '\n';
-        // for (auto &entry: entries.second) {
-        //     std::cout << entry.IP << '\n';
-        // }
+        for (auto &entry: entries.second) {
+            s.insert(entry.IP);
+        }
+        for (auto &ip: s) {
+            std::cout << ip << '\n';
+        }
         puts("----------");
     }
     return 0;

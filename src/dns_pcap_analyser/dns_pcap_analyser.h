@@ -17,6 +17,8 @@
 #include <map>
 #include <set>
 
+#include "pcap_reader.hpp"
+
 namespace fs = std::filesystem;
 
 // DNS头部结构
@@ -62,7 +64,8 @@ typedef std::map<std::string, dns_entries> result_t ;
 
 class DNSPcapAnalyser {
 public:
-	static void processPacket(u_char *userData, const struct pcap_pkthdr *pkthdr, const u_char *packetData);
+	// static void processPacket(u_char *userData, const struct pcap_pkthdr *pkthdr, const u_char *packetData);
+	static void processPacket(u_char *userData, const struct PcapPacketHeader *pkthdr, const u_char *packetData);
 	DNSPcapAnalyser() = default;
 	DNSPcapAnalyser(std::vector<fs::path>& _files): files(_files) { };
 	~DNSPcapAnalyser() = default;
