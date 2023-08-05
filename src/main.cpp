@@ -1,4 +1,4 @@
-#include "src/dns_pcap_analyser.h"
+#include "dns_pcap_analyser/dns_pcap_analyser.h"
 #include <iostream>
 
 namespace fs = std::filesystem;
@@ -62,5 +62,12 @@ int main(int argc, char* argv[]) {
 	DNSPcapAnalyser analyser(files);
 	result_t result;
 	analyser.analyseAll(result);
+    for (auto &entries: result) {
+        std::cout << entries.first << '\n';
+        // for (auto &entry: entries.second) {
+        //     std::cout << entry.IP << '\n';
+        // }
+        puts("----------");
+    }
     return 0;
 }
