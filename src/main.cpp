@@ -1,5 +1,6 @@
-#include "dns_pcap_analyser/dns_pcap_analyser.h"
 #include <iostream>
+#include "dns_pcap_analyser/dns_pcap_analyser.h"
+#include "command_line_parser.hpp"
 
 namespace fs = std::filesystem;
 
@@ -52,12 +53,27 @@ std::vector<fs::path> parseFiles(std::string path) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " [file/directory]" << std::endl;
-        return 1;
+    CommandLineParser parser(argc, argv);
+
+    if (!parser.OptionExists("-f")) {
+        std::cerr << "Error: -file option is required." << std::endl;
+        parser.PrintUsageAndExit();
     }
 
-    std::string path = argv[1];
+    std::string inputFile = parser.GetOptionValue("-f");
+    std::cout << "Input file: " << inputFile << std::endl;
+
+    std::string outputDir;
+    if (parser.OptionExists("-o")) {
+        outputDir = parser.GetOptionValue("-o");
+    } else {
+        outputDir = parser.GetDefaultOutputDirectory();
+    }
+    std::cout << "Output directory: " << outputDir << std::endl;
+
+    std::string path = inputFile;
+    std::cerr << "path " << path << '\n';
+
 	auto files = parseFiles(path);
 	DNSPcapAnalyser analyser(files);
 	result_t result;
