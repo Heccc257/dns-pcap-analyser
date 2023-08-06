@@ -18,13 +18,9 @@ list(REMOVE_ITEM SRC_FILES "${SRC_DIR}/main.cpp")
 add_library(dns_pcap_analyser STATIC ${SRC_FILES})
 target_include_directories(dns_pcap_analyser PUBLIC "${SRC_DIR}/dns_pcap_analyser")
 
-# Link libpcap
-find_library(PCAP_LIBRARY pcap)
-target_link_libraries(dns_pcap_analyser PUBLIC ${PCAP_LIBRARY})
-
 # Create the executable
 add_executable(dns_pcap_analyser_app "${SRC_DIR}/main.cpp")
-target_link_libraries(dns_pcap_analyser_app PRIVATE dns_pcap_analyser ${PCAP_LIBRARY})
+target_link_libraries(dns_pcap_analyser_app PRIVATE dns_pcap_analyser)
 set_target_properties(dns_pcap_analyser_app PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}")
 
 # Set the library output directory

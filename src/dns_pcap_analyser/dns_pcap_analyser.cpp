@@ -9,7 +9,6 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
     if (pkthdr->incl_len == 0) {
         std::cerr << "capture end\n";
-        pcap_breakloop(analyserThis->pcapHandle);
         return ;
     }
     // return ;

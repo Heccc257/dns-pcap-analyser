@@ -1,7 +1,7 @@
 #ifndef DNS_PCAP_ANALYSER_H
 #define DNS_PCAP_ANALYSER_H
 
-#include <pcap.h>
+// #include <pcap.h>
 #include <net/ethernet.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
@@ -73,8 +73,6 @@ public:
 	bool analyse(const fs::path& path, result_t &results);
 	bool analyseAll(result_t &result);
 private:
-  	pcap_t *pcapHandle;
-	char errbuf[PCAP_ERRBUF_SIZE];
 	std::vector<fs::path> files;
 	result_t* mResult;
 };
