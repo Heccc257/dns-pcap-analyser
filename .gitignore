@@ -39,3 +39,6 @@ test/*
 
 # build
 build/*
+
+output/*
+data/*
