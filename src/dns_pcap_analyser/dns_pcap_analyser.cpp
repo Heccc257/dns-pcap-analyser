@@ -163,7 +163,8 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     }
     dns_entries &entries = result[domain];
     for (int j = 0; j < htons(dnsHeader->answers); ++j) {
-        if (cnt == 64726) {
+        if (cnt == 2488982) {
+            std::cerr << "j= " << j << '\n';
             std::cerr << "current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
             std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
         }
@@ -172,7 +173,7 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
         if (!read_point_format()) return ;
 
 
-        if (cnt == 64726) {
+        if (cnt == 2488982) {
             std::cerr << "after walk current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
             std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
             std::cerr << "is pointer = " << is_pointer << '\n';
@@ -180,7 +181,8 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
         if (!is_pointer) { // 如果最后不是以指针形式结尾
             if (*reinterpret_cast<const ushort*>(currentByte) == 0)
-                currentByte ++ ;
+                currentByte -= 1 ;
+            else currentByte -= 2;
             // if ((reinterpret_cast<const unsigned long long>(currentByte) - reinterpret_cast<const unsigned long long>(packetData))&0x1) // 字节对齐
             //     currentByte ++;
         }
@@ -191,6 +193,12 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
         const struct DNSAnswer *answerHeader = (struct DNSAnswer *)(answerStart);
         const u_char *answerData = answerStart + sizeof(struct DNSAnswer);
 
+        if (cnt == 2488982) {
+            std::cerr << std::hex << answerHeader->type << ' ' << answerHeader->_class << ' ' << answerHeader->ttl1 << ' ' << answerHeader->ttl2 << '\n';
+            std::cerr << "header = " << (void*)answerHeader << ' ' << std::hex << answerHeader->dataLength << ' ' << (*(unsigned long long*)answerHeader) << '\n';
+            std::cerr << "len = " << ntohs(answerHeader->dataLength) << '\n';
+        }
+        
         if (answerData + ntohs(answerHeader->dataLength) > endByte) {
             truncate();
             return ;
