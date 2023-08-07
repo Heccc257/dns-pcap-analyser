@@ -39,17 +39,13 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     
     // 获取查询问题部分的起始位置
     const u_char *queryStart = (packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize + sizeof(struct DNSHeader));
-    
-    if (cnt == 1354170) {
-        std::cerr << "ANS = " << htons(dnsHeader->answers) << " " << pkthdr->incl_len << ' ' << pkthdr->orig_len << '\n';
-        // exit(0);
-    }
 
     // 如果不是 response 报文则 return
     if (ipHeader->ip_p != IPPROTO_UDP || ntohs(udpHeader->uh_sport) != 53) return;
 
     if (ntohs(dnsHeader->questions) > 1) {
         // 先不考虑query数量大于1的情况
+        std::cerr << "Packet num " << cnt << " more than 1 queries\n";
         return ;
     }
 
@@ -62,8 +58,9 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
     std::string domain;
     auto read_point_format = [&]() {
-        if (cnt == 1354170) {
-            std::cerr << "current = " << (void*)currentByte << " begin = " << (void*)packetData << "\n";
+        if (currentByte >= endByte) {
+            truncate(); // 
+            return 0;
         }
         domain = "";
         bool is_pointer = 0;
@@ -100,14 +97,38 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
         } 
         return 1;
     };
+
+    bool isSOA = 0;
+
     for (int i = 0; i < ntohs(dnsHeader->questions); ++i) {
         // 解析域名
         if (!read_point_format()) return ;
+
+        // 每个报文最后有四个字节的Query头
+        const DNSQuery *queryHdr = reinterpret_cast<const DNSQuery*>(currentByte + 1);
+        currentByte += 5;
+        if (currentByte > endByte) {
+            truncate();
+            return ;
+        }
+        if (queryHdr->type == 0x600) {
+            isSOA = 1;
+        }
     }
-    
+
+    // SOA报文的response部分的name只有一个字节
+    if (isSOA) {
+        std::cerr << "SOA packet " << cnt << '\n';
+        return ;
+    }
+
+    if (cnt == 2400) {
+        std::cerr << "current = " << (void*) currentByte << " begin = " << (void*)packetData << '\n';
+    }
 
     // 解析回答部分
-    const u_char *answerStart = currentByte + 5; // 跳过查询问题的类型和类别
+    // const u_char *answerStart = currentByte + 5; // 跳过查询问题的类型和类别
+    const u_char *answerStart = currentByte; // 跳过查询问题的类型和类别
 
     // 这里需要获取一下query的类型和类别
     const struct DNSQuery *queryHeader = (struct DNSQuery *)(currentByte + 1);
@@ -120,6 +141,11 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
         if (answerData + ntohs(answerHeader->dataLength) > endByte) {
             truncate();
+
+            exit(0);
+
+
+
             return ;
         }
 
