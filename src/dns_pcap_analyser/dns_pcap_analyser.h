@@ -39,7 +39,7 @@ struct DNSQuery {
 
 // DNS回答结构
 struct DNSAnswer {
-	u_short name;
+	// u_short name;
 	u_short type;
 	u_short _class;
 	u_short ttl1;

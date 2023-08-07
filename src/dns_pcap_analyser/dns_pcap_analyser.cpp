@@ -6,7 +6,7 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     DNSPcapAnalyser* analyserThis = reinterpret_cast<DNSPcapAnalyser*>(userData);
     result_t& result = *analyserThis->mResult;
     cnt ++ ;
-
+    // std::cerr << "cnt = " << cnt << '\n';
     if (pkthdr->incl_len == 0) {
         std::cerr << "capture end\n";
         return ;
@@ -52,20 +52,31 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     // 遍历查询问题
     const u_char *currentByte = queryStart;
     const u_char *endByte = packetData + pkthdr->incl_len;
+    if (cnt == 64726)
+        std::cerr << "packet = " << (void*)packetData << " len = " << pkthdr->incl_len << '\n' << " begingin = " << (void*)packetData << '\n';
 
     auto truncate = [&]() { std::cerr << "truncated packet number: " << std::dec << cnt << '\n'; };
 
 
     std::string domain;
+    bool is_pointer = 0;
+    int temcnt = 0;
+    int readLimit;
     auto read_point_format = [&]() {
+        readLimit = 255;
         if (currentByte >= endByte) {
             truncate(); // 
             return 0;
         }
         domain = "";
-        bool is_pointer = 0;
+        is_pointer = 0;
         const u_char* lst;
         while (*currentByte != 0) {
+            if (cnt == 64726)
+                std::cerr << (void*)currentByte << " begin = " << (void*)packetData << '\n';
+            if (--readLimit == 0) {
+                std::cerr << "超过 read limit  packet " << cnt << '\n';
+            }
             if ((*currentByte & 0xC0) == 0xC0) {
                 if (!is_pointer) {
                     is_pointer = 1;
@@ -73,10 +84,23 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
                 }
                 // 判断是否为指针
                 int pointer = (*currentByte & 0x3F) << 8 | *(currentByte + 1);
-                currentByte = packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + pointer;
+                // currentByte = packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + pointer;
+                currentByte = reinterpret_cast<const u_char*>(dnsHeader) + pointer;
+                // if (cnt == 4177) {
+                //     if (++temcnt == 100) exit(0);
+                //     std::cerr << "goto current = " << (void*)currentByte << " begin = " << (void*)packetData << ' ' << (*currentByte == 0) << '\n';
+                //     // exit(0);
+                // }
+
                 // 如果字符串是以指针的形式保存，则currentByte的最终位置为当前位置向后位移两个字节。
             } else {
                 int labelLength = *currentByte;
+                if (labelLength > 63) {
+                    std::cerr << "label 长度过大 packet " << cnt << '\n';
+                    domain = "";
+                    return 1;
+                }
+
                 currentByte++;
                 for (int j = 0; j < labelLength; ++j) {
                     domain += *currentByte;
@@ -84,6 +108,9 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
                 }
                 domain += '.';
             }
+
+            if (cnt == 64726)
+                std::cerr << "end " << (void*)currentByte << " begin = " << (void*)packetData << " end = " << (void*)endByte << '\n';
             if (currentByte >= endByte) {
                 truncate(); // 
                 return 0;
@@ -94,62 +121,80 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
         if (is_pointer){
             currentByte = lst + 2;
-        } 
+        }
+        
         return 1;
     };
 
     bool isSOA = 0;
 
+    const struct DNSQuery *queryHeader;
     for (int i = 0; i < ntohs(dnsHeader->questions); ++i) {
         // 解析域名
         if (!read_point_format()) return ;
 
         // 每个报文最后有四个字节的Query头
-        const DNSQuery *queryHdr = reinterpret_cast<const DNSQuery*>(currentByte + 1);
+        queryHeader = reinterpret_cast<const DNSQuery*>(currentByte + 1);
+
+        // currentByte目前处于字符串末尾的0x00，所以要偏移5个字节
         currentByte += 5;
+
         if (currentByte > endByte) {
             truncate();
             return ;
         }
-        if (queryHdr->type == 0x600) {
+        if (queryHeader->type == 0x600) {
             isSOA = 1;
         }
     }
-
     // SOA报文的response部分的name只有一个字节
     if (isSOA) {
         std::cerr << "SOA packet " << cnt << '\n';
         return ;
     }
 
-    if (cnt == 2400) {
-        std::cerr << "current = " << (void*) currentByte << " begin = " << (void*)packetData << '\n';
-    }
 
     // 解析回答部分
-    // const u_char *answerStart = currentByte + 5; // 跳过查询问题的类型和类别
-    const u_char *answerStart = currentByte; // 跳过查询问题的类型和类别
+    const u_char *answerStart;
 
-    // 这里需要获取一下query的类型和类别
-    const struct DNSQuery *queryHeader = (struct DNSQuery *)(currentByte + 1);
-
+    if (cnt == 15205) {
+        std::cerr << "1current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
+        std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
+    }
     dns_entries &entries = result[domain];
     for (int j = 0; j < htons(dnsHeader->answers); ++j) {
+        if (cnt == 64726) {
+            std::cerr << "current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
+            std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
+        }
+        // TODO 6680号和64726号报文的格式不统一
+
+        if (!read_point_format()) return ;
+
+
+        if (cnt == 64726) {
+            std::cerr << "after walk current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
+            std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
+            std::cerr << "is pointer = " << is_pointer << '\n';
+        }
+
+        if (!is_pointer) { // 如果最后不是以指针形式结尾
+            if (*reinterpret_cast<const ushort*>(currentByte) == 0)
+                currentByte ++ ;
+            // if ((reinterpret_cast<const unsigned long long>(currentByte) - reinterpret_cast<const unsigned long long>(packetData))&0x1) // 字节对齐
+            //     currentByte ++;
+        }
+
+        // 如果是点分字符串形式，则answerStart起始位置为字符串末尾的0x00
+        answerStart = currentByte;
 
         const struct DNSAnswer *answerHeader = (struct DNSAnswer *)(answerStart);
         const u_char *answerData = answerStart + sizeof(struct DNSAnswer);
 
         if (answerData + ntohs(answerHeader->dataLength) > endByte) {
             truncate();
-
-            exit(0);
-
-
-
             return ;
         }
-
-        currentByte = reinterpret_cast<const u_char*>(answerHeader); // hdr的头两个字节为name的指针
 
         if (ntohs(answerHeader->type) == ntohs(queryHeader->type) && ntohs(answerHeader->_class) == ntohs(queryHeader->_class)) {            // 处理回答部分类型为 A 类型（IPv4地址）的记录
             if (ntohs(answerHeader->type) == 1 && answerHeader->dataLength == htons(4)) {
@@ -179,6 +224,7 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
         }
         // 移动到下一个回答部分
         answerStart += sizeof(struct DNSAnswer) + ntohs(answerHeader->dataLength);
+        currentByte = answerStart;
     }
     return ;
 }
