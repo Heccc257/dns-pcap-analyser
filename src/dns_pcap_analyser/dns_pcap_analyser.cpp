@@ -35,7 +35,15 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
     // 解析 DNS 头部
     const struct DNSHeader *dnsHeader = (struct DNSHeader *)(packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize);
-
+    if (cnt == 2488624) {
+        std::cerr << std::hex << "flag = " << dnsHeader->flags << ' ' << ((dnsHeader->flags>>6)&1) << '\n';
+    }
+    if ((dnsHeader->flags>>1) & 1) { // 判断truncate标志位
+        // 有一些能解析出来的报文，truncated位置也是1?
+        std::cerr << "message is truncated " << std::dec << cnt << '\n';
+        if (cnt > 2488623) exit(0);
+        return ;
+    }
     
     // 获取查询问题部分的起始位置
     const u_char *queryStart = (packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize + sizeof(struct DNSHeader));
@@ -163,7 +171,7 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     }
     dns_entries &entries = result[domain];
     for (int j = 0; j < htons(dnsHeader->answers); ++j) {
-        if (cnt == 2488982) {
+        if (cnt == 148929) {
             std::cerr << "j= " << j << '\n';
             std::cerr << "current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
             std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
@@ -172,20 +180,13 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
         if (!read_point_format()) return ;
 
-
-        if (cnt == 2488982) {
-            std::cerr << "after walk current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
-            std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
-            std::cerr << "is pointer = " << is_pointer << '\n';
-        }
-
         if (!is_pointer) { // 如果最后不是以指针形式结尾
             if (*reinterpret_cast<const ushort*>(currentByte) == 0)
                 currentByte -= 1 ;
             else currentByte -= 2;
             // if ((reinterpret_cast<const unsigned long long>(currentByte) - reinterpret_cast<const unsigned long long>(packetData))&0x1) // 字节对齐
             //     currentByte ++;
-        }
+        } else currentByte -= 2;
 
         // 如果是点分字符串形式，则answerStart起始位置为字符串末尾的0x00
         answerStart = currentByte;
@@ -193,12 +194,6 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
         const struct DNSAnswer *answerHeader = (struct DNSAnswer *)(answerStart);
         const u_char *answerData = answerStart + sizeof(struct DNSAnswer);
 
-        if (cnt == 2488982) {
-            std::cerr << std::hex << answerHeader->type << ' ' << answerHeader->_class << ' ' << answerHeader->ttl1 << ' ' << answerHeader->ttl2 << '\n';
-            std::cerr << "header = " << (void*)answerHeader << ' ' << std::hex << answerHeader->dataLength << ' ' << (*(unsigned long long*)answerHeader) << '\n';
-            std::cerr << "len = " << ntohs(answerHeader->dataLength) << '\n';
-        }
-        
         if (answerData + ntohs(answerHeader->dataLength) > endByte) {
             truncate();
             return ;
