@@ -37,9 +37,8 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     const struct DNSHeader *dnsHeader = (struct DNSHeader *)(packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize);
 
     if ((dnsHeader->flags>>1) & 1) { // 判断truncate标志位
-        // 有一些能解析出来的报文，truncated位置也是1?
-        // 所以先继续？
-        std::cerr << "message is truncated " << std::dec << cnt << '\n';
+        // 学校100多字节就会truncated,所以先忽略
+        // std::cerr << "message is truncated " << std::dec << cnt << '\n';
         // return ;
     }
     
