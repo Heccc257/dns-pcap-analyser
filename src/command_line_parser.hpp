@@ -21,7 +21,7 @@ public:
     }
 
     std::string GetDefaultOutputDirectory() const {
-        return "test/output.txt";
+        return "../test/output.txt";
     }
 
     void PrintUsageAndExit() const {

@@ -35,13 +35,12 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
     // 解析 DNS 头部
     const struct DNSHeader *dnsHeader = (struct DNSHeader *)(packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + udpHeaderSize);
-    if (cnt == 2488624) {
-        std::cerr << std::hex << "flag = " << dnsHeader->flags << ' ' << ((dnsHeader->flags>>6)&1) << '\n';
-    }
+
     if ((dnsHeader->flags>>1) & 1) { // 判断truncate标志位
         // 有一些能解析出来的报文，truncated位置也是1?
+        // 所以先继续？
         std::cerr << "message is truncated " << std::dec << cnt << '\n';
-        return ;
+        // return ;
     }
     
     // 获取查询问题部分的起始位置
@@ -59,8 +58,6 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     // 遍历查询问题
     const u_char *currentByte = queryStart;
     const u_char *endByte = packetData + pkthdr->incl_len;
-    if (cnt == 64726)
-        std::cerr << "packet = " << (void*)packetData << " len = " << pkthdr->incl_len << '\n' << " begingin = " << (void*)packetData << '\n';
 
     auto truncate = [&]() { std::cerr << "truncated packet number: " << std::dec << cnt << '\n'; };
 
@@ -93,11 +90,6 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
                 int pointer = (*currentByte & 0x3F) << 8 | *(currentByte + 1);
                 // currentByte = packetData + virtualLanSize + ethernetHeaderSize + ipHeaderSize + pointer;
                 currentByte = reinterpret_cast<const u_char*>(dnsHeader) + pointer;
-                // if (cnt == 4177) {
-                //     if (++temcnt == 100) exit(0);
-                //     std::cerr << "goto current = " << (void*)currentByte << " begin = " << (void*)packetData << ' ' << (*currentByte == 0) << '\n';
-                //     // exit(0);
-                // }
 
                 // 如果字符串是以指针的形式保存，则currentByte的最终位置为当前位置向后位移两个字节。
             } else {
@@ -116,8 +108,6 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
                 domain += '.';
             }
 
-            if (cnt == 64726)
-                std::cerr << "end " << (void*)currentByte << " begin = " << (void*)packetData << " end = " << (void*)endByte << '\n';
             if (currentByte >= endByte) {
                 truncate(); // 
                 return 0;
@@ -163,18 +153,8 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
 
     // 解析回答部分
     const u_char *answerStart;
-
-    if (cnt == 15205) {
-        std::cerr << "1current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
-        std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
-    }
     dns_entries &entries = result[domain];
     for (int j = 0; j < htons(dnsHeader->answers); ++j) {
-        if (cnt == 148929) {
-            std::cerr << "j= " << j << '\n';
-            std::cerr << "current = " << (void*)currentByte << " begin = " << (void*)packetData << '\n';
-            std::cerr << (*currentByte&0xC0) << ' ' << ((*currentByte&0xC0)==0XC0) << '\n';
-        }
         // TODO 6680号和64726号报文的格式不统一
 
         if (!read_point_format()) return ;

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include "dns_pcap_analyser/dns_pcap_analyser.h"
 #include "command_line_parser.hpp"
 
@@ -61,7 +62,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::string inputFile = parser.GetOptionValue("-f");
-    std::cout << "Input file: " << inputFile << std::endl;
+    std::cerr << "Input file: " << inputFile << std::endl;
 
     std::string outputDir;
     if (parser.OptionExists("-o")) {
@@ -78,16 +79,29 @@ int main(int argc, char* argv[]) {
 	DNSPcapAnalyser analyser(files);
 	result_t result;
 	analyser.analyseAll(result);
+
+    std::ofstream outputFile(outputDir.c_str());
+    if (!outputFile) {
+        
+        std::cerr << "Error opening the output file: " << outputDir << std::endl;
+        return 1;
+    }
+
+    outputFile << "Input files:\n";
+    for (auto &f: files)
+        outputFile << f << '\n';
+    outputFile << "----------\n\n";
     for (auto &entries: result) {
         std::set<std::string>s;
-        std::cout << entries.first << '\n';
+        outputFile << entries.first << '\n';
         for (auto &entry: entries.second) {
             s.insert(entry.IP);
         }
         for (auto &ip: s) {
-            std::cout << ip << '\n';
+            outputFile << ip << '\n';
         }
-        puts("----------");
+        outputFile <<  "----------\n\n";
     }
+    outputFile.close();
     return 0;
 }
