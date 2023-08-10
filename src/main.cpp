@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     outputFile << "----------\n\n";
     for (auto &entries: result) {
         std::set<std::string>s;
-        outputFile << entries.first << '\n';
+        outputFile << "domain: " << entries.first << '\n';
         for (auto &entry: entries.second) {
             s.insert(entry.IP);
         }

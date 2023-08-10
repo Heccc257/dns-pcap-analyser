@@ -145,7 +145,7 @@ void DNSPcapAnalyser::processPacket(u_char *userData, const struct PcapPacketHea
     }
     // SOA报文的response部分的name只有一个字节
     if (isSOA) {
-        std::cerr << "SOA packet " << cnt << '\n';
+        // std::cerr << "SOA packet " << cnt << '\n';
         return ;
     }
 
